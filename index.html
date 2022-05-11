@@ -329,7 +329,7 @@
                             await sleep(20);
                         }
                         console.log("You're too stressed to play anymore!");
-                        let interval = setInterval(async () => {
+                        let interval = setInterval(() => {
                             // slowly increase the opacity of a red overlay on the canvas
                             // hacky way to make sure rendering things happen
                             ctx.fillStyle = `red`;
