@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Siddhartha Game</title>
+</head>
+
+<body>
+    <!-- <h1>Siddhartha Game</h1> -->
+    <canvas id="canvas" width="640" height="480" style="border: 1px solid black"></canvas>
+    <script>
+        let cfg = {
+            debug: true
+        }
+        async function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function roundedRect(ctx, x, y, width, height, radius, fill) {
+            ctx.beginPath();
+            ctx.moveTo(x, y + radius);
+            ctx.arcTo(x, y + height, x + radius, y + height, radius);
+            ctx.arcTo(x + width, y + height, x + width, y + height - radius, radius);
+            ctx.arcTo(x + width, y, x + width - radius, y, radius);
+            ctx.arcTo(x, y, x, y + radius, radius);
+            ctx.closePath();
+            if (fill) {
+                let originalFill = ctx.fillStyle;
+                ctx.fillStyle = fill;
+                ctx.fill();
+                ctx.fillStyle = originalFill;
+            }
+            ctx.stroke();
+
+        }
+
+        function partialRoundRect(ctx, x, y, width, height, radius, fill) {
+            ctx.beginPath();
+            ctx.moveTo(x, y + radius);
+            ctx.arcTo(x, y + height, x + radius, y + height, radius);
+            ctx.arcTo(x + width, y + height, x + width, y + height - radius, radius);
+            ctx.lineTo(x + width, y, x + width - radius, y, radius);
+            ctx.lineTo(x, y, x, y + radius, radius);
+            ctx.closePath();
+            if (fill) {
+                let originalFill = ctx.fillStyle;
+                ctx.fillStyle = fill;
+                ctx.fill();
+                ctx.fillStyle = originalFill;
+            }
+        }
+        const canvas = document.getElementById("canvas");
+
+        class RegisterableEvent {
+            constructor(node, event) {
+
+                this.registeredEvents = [];
+                this.activeCallbacks = [];
+                node[event] = (e) => {
+                    for (let i = 0; i < this.registeredEvents.length; i++) {
+                        let registeredEvent = this.registeredEvents[i];
+                        if (e.offsetX >= registeredEvent.startX && e.offsetX <= registeredEvent.startX + registeredEvent.width &&
+                            e.offsetY >= registeredEvent.startY && e.offsetY <= registeredEvent.startY + registeredEvent.height) {
+                            this.activeCallbacks.push(registeredEvent.callback);
+                        }
+                    }
+                }
+            }
+
+            registerEvent(startX, startY, width, height, callback) {
+                this.registeredEvents.push({
+                    startX: startX,
+                    startY: startY,
+                    width: width,
+                    height: height,
+                    callback: callback
+                });
+            }
+        }
+
+        let onclickListeners = new RegisterableEvent(canvas, "onclick");
+        let onmousedownListeners = new RegisterableEvent(canvas, "onmousedown");
+        let onmouseupListeners = new RegisterableEvent(canvas, "onmouseup");
+
+        let items = [];
+        class CanvasItem {
+            constructor(ctx, x, y, width, height) {
+                if (x === undefined || y === undefined || width === undefined || height === undefined) {
+                    throw new Error("Missing parameters");
+                }
+
+                this.ctx = ctx;
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.visible = true;
+                items.push(this);
+            }
+
+            set onclick(callback) {
+                onclickListeners.registerEvent(this.x, this.y, this.width, this.height, callback.bind(this));
+            }
+
+            set onmousedown(callback) {
+                onmousedownListeners.registerEvent(this.x, this.y, this.width, this.height, callback.bind(this));
+            }
+
+            set onmouseup(callback) {
+                onmouseupListeners.registerEvent(this.x, this.y, this.width, this.height, callback.bind(this));
+            }
+
+            initialize() { }
+            step() { }
+            draw() { }
+        }
+
+        const ctx = canvas.getContext("2d");
+
+        let firstLoop = true;
+        let stoppedGame = false;
+        // main game loop
+        function main() {
+            if (stoppedGame) {
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].initialized === false) {
+                    items[i].initialize();
+                    items[i].initialized = true;
+                }
+            }
+            if (firstLoop) {
+                console.log(items);
+                firstLoop = false;
+                for (let i = 0; i < items.length; i++) {
+                    console.log(items[i]);
+                    items[i].initialize();
+                }
+            }
+
+            if (onclickListeners.activeCallbacks.length > 0) {
+                onclickListeners.activeCallbacks.forEach(callback => callback());
+                onclickListeners.activeCallbacks = [];
+            }
+            if (onmousedownListeners.activeCallbacks.length > 0) {
+                onmousedownListeners.activeCallbacks.forEach(callback => callback());
+                onmousedownListeners.activeCallbacks = [];
+            }
+            if (onmouseupListeners.activeCallbacks.length > 0) {
+                onmouseupListeners.activeCallbacks.forEach(callback => callback());
+                onmouseupListeners.activeCallbacks = [];
+            }
+
+            let onclicks = onmousedownListeners.registeredEvents;
+            for (let i = 0; i < onclicks.length; i++) {
+                let clickable = onclicks[i];
+                ctx.strokeStyle = "black";
+                ctx.stroke();
+            }
+            for (let i = 0; i < items.length; i++) {
+                items[i].step();
+            }
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].visible) {
+                    items[i].draw();
+                } else {
+                    ctx.clearRect(items[i].x, items[i].y, items[i].width, items[i].height);
+                }
+            }
+
+            requestAnimationFrame(main);
+        }
+        requestAnimationFrame(main);
+    </script>
+    <script>
+        const DICE_SIZE = 74;
+        class Dice extends CanvasItem {
+            constructor(ctx, x, y) {
+                super(ctx, x, y, DICE_SIZE, DICE_SIZE);
+                this.value = Math.floor(Math.random() * 6) + 1;
+
+                this.diceImages = [
+                    "resources/dice/dice-1.png",
+                    "resources/dice/dice-2.png",
+                    "resources/dice/dice-3.png",
+                    "resources/dice/dice-4.png",
+                    "resources/dice/dice-5.png",
+                    "resources/dice/dice-6.png"
+                ].map(path => {
+                    let img = new Image();
+                    img.src = path;
+                    return img;
+                });
+            }
+
+            async roll() {
+                let rolls = []
+                for (let i = 0; i < 10; i++) {
+                    this.value = Math.floor(Math.random() * 6) + 1;
+                    rolls.push(this.value);
+                    await sleep(150);
+                }
+                return this.value
+            }
+
+            draw() {
+                this.ctx.drawImage(this.diceImages[this.value - 1], this.x, this.y);
+            }
+        }
+
+        let dice1 = new Dice(ctx, canvas.width / 2 - (DICE_SIZE / 2) - 50, canvas.height * 0.5);
+        let dice2 = new Dice(ctx, canvas.width / 2 - (DICE_SIZE / 2) + 50, canvas.height * 0.5);
+
+        class Button extends CanvasItem {
+            constructor(ctx, x, y, width, height, text, callback, fontSize = 12, fontColor = "black") {
+                super(ctx, x, y, width, height);
+
+                callback && (this.onclick && callback.bind(this));
+
+                this.text = text;
+                this.fontSize = fontSize;
+                this.fontColor = fontColor;
+
+                this.depressed = false;
+                this.onmousedown = () => {
+                    this.depressed = true;
+                }
+
+                this.onmouseup = () => {
+                    this.depressed = false;
+                }
+            }
+
+            draw() {
+                this.ctx.fillStyle = this.fontColor;
+                this.ctx.font = `${this.fontSize}px Arial`;
+
+                let color = "green";
+                if (this.depressed) {
+                    color = "red";
+                }
+                roundedRect(this.ctx, this.x, this.y, this.width, this.height, 10, color);
+
+                // centered text
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
+            }
+
+        }
+
+        class StressBar extends CanvasItem {
+            constructor(ctx, x, y, width, height, text, maxStress) {
+                super(ctx, x, y, width, height);
+                this.stress = 0
+                this.renderedStress = 0;
+                this.maxStress = maxStress;
+            }
+
+            async addStress(amount) {
+                this.stress += amount;
+                for (let i = 0; i < amount; i++) {
+                    this.renderedStress++;
+                    await sleep(20);
+                }
+            }
+
+            draw() {
+                this.ctx.strokeStyle = "red";
+                roundedRect(this.ctx, this.x, this.y, this.width, this.height, 5);
+
+                partialRoundRect(this.ctx, this.x, this.y + (this.height * (1 - (this.renderedStress / this.maxStress))), this.width, this.height * (this.renderedStress / this.maxStress), 5, "red");
+
+            }
+        }
+        const stressBar = new StressBar(ctx, canvas.width / 6, canvas.height / 2 - 40, 20, canvas.height / 3, "Stress", 100);
+        class Text extends CanvasItem {
+            constructor(ctx, x, y, text, fontSize = 12, fontColor = "black") {
+                super(ctx, x, y, 0, 0);
+                this.text = text;
+                this.fontSize = fontSize;
+                this.fontColor = fontColor;
+            }
+
+            draw() {
+                this.ctx.fillStyle = this.fontColor;
+                this.ctx.font = `${this.fontSize}px Arial`;
+                this.ctx.fillText(this.text, this.x, this.y);
+
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+
+                this.ctx.fillText(this.text, this.x, this.y);
+            }
+
+        }
+
+        const stressHeading = new Text(ctx, canvas.width / 6 + 10, canvas.height / 2 - 49, "Stress");
+        let heading = new Text(ctx, canvas.width / 2, canvas.height * 0.1, "Dice Game", 40);
+        let winningNumber = new Text(ctx, canvas.width * 0.35, canvas.height * 0.3, "Winning Number: ", 20);
+        let winningResult = new Text(ctx, canvas.width * 0.65, canvas.height * 0.3, "Result: ", 20);
+
+        class MoneyIndicator extends Text {
+            constructor(ctx, x, y, text, fontSize = 12) {
+                super(ctx, x, y, text, fontSize, "black");
+                this.visible = false;
+            }
+
+            async earnings(isWin, amount) {
+                this.visible = true;
+                console.log(`${isWin ? "Win" : "Lose"} ${amount}`);
+                if (isWin) {
+                    this.text = `+${amount}`;
+                    this.fontColor = "green";
+                } else {
+                    this.text = `-${amount}`;
+                    this.fontColor = "red";
+
+                    stressBar.addStress(100);
+
+                    console.log(`Stress: ${stressBar.stress}`);
+                    console.log(`Max Stress: ${stressBar.maxStress}`);
+                    if (stressBar.stress >= stressBar.maxStress) {
+                        let n = 0;
+                        while (stressBar.renderedStress < stressBar.maxStress) {
+                            await sleep(20);
+                        }
+                        console.log("You're too stressed to play anymore!");
+                        let interval = setInterval(async () => {
+                            // slowly increase the opacity of a red overlay on the canvas
+                            // hacky way to make sure rendering things happen
+                            ctx.fillStyle = `red`;
+                            ctx.globalAlpha = n
+                            stoppedGame = true;
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            n += 0.001;
+                            if (n >= 0.3) {
+                                clearInterval(interval);
+                                ctx.globalAlpha = 1;
+                                ctx.fillStyle = "black";
+                                ctx.fontSize = "80px";
+                                ctx.fillText("Luckily, Siddhartha did not actually drown himself in the river. ", canvas.width / 2, canvas.height * 0.5);
+
+                                const image = new Image();
+                                image.src = "./resources/coin.png"
+
+                                image.onload = () => {
+                                    ctx.drawImage(image, canvas.width / 2 - image.width / 2, canvas.height * 0.5 - image.height / 2 + 40);
+                                }
+                            }
+                        }, 10)
+                    }
+
+                    setTimeout(() => {
+                        this.visible = false;
+                    }, 1000);
+                }
+            }
+        }
+        let moneyIndicator = new MoneyIndicator(ctx, canvas.width / 2 + 40, canvas.height * 0.25, "0");
+        class Money extends Text {
+            constructor(ctx, x, y, text, fontSize = 12, fontColor = "black") {
+                super(ctx, x, y, text, fontSize, fontColor);
+
+                this.money = 1000;
+
+                setInterval(() => {
+                    this.money = this.money + Math.floor(Math.random() * 200) - 90;
+
+                    if (this.money < 0) {
+                        this.money = 0;
+                    }
+                }, 2000)
+            }
+            draw() {
+                this.text = `You have: $${this.money}`;
+                super.draw();
+            }
+        }
+
+        let money = new Money(ctx, canvas.width / 2, canvas.height * 0.2, "Money", 20);
+        const BUTTON_WIDTH = 100;
+        const BUTTON_HEIGHT = 20;
+        let button = new Button(ctx, canvas.width / 2 - (BUTTON_WIDTH / 2), canvas.height * 0.75, BUTTON_WIDTH, BUTTON_HEIGHT, "New Game");
+        button.onclick = async () => {
+            let cont = true;
+            let winning
+            while (cont) {
+                let input = prompt("Enter a winning number! (2-12). You get 2x your money if your bet pays off. The dice are rolled twice.");
+                if (input && parseInt(input) >= 2 && parseInt(input) <= 12) {
+                    cont = false;
+                    winning = parseInt(input);
+                }
+            }
+            winningNumber.text = `Winning Number: ${winning}`;
+            button.visible = false;
+            let result = await Promise.all([dice1.roll(), dice2.roll()]);
+            let result2 = [-1, -1];
+            if (result[0] !== winning) {
+                await sleep(1000);
+                let result2 = await Promise.all([dice1.roll(), dice2.roll()]);
+            }
+            let sum = result[0] + result[1];
+            let sum2 = result2[0] + result2[1];
+
+            winningResult.text = `Result: ${sum}`;
+            const bet = 350;
+            if (sum === winning || sum2 === winning) {
+                money.money += 2 * bet;
+                moneyIndicator.earnings(true, 2 * bet);
+            } else {
+                money.money -= bet;
+                moneyIndicator.earnings(false, bet);
+            }
+            button.visible = true
+        }
+
+    </script>
+</body>
+
+</html>
