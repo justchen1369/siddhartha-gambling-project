@@ -11,7 +11,7 @@
     <canvas id="canvas" width="640" height="480" style="border: 1px solid black"></canvas>
     <script>
         let cfg = {
-            debug: true
+            debug: false
         }
         async function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -319,7 +319,7 @@
                     this.text = `-${amount}`;
                     this.fontColor = "red";
 
-                    stressBar.addStress(50);
+                    stressBar.addStress(25);
 
                     console.log(`Stress: ${stressBar.stress}`);
                     console.log(`Max Stress: ${stressBar.maxStress}`);
